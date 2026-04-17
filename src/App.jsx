@@ -3,10 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://eduozrpdvhkrsabrbbbf.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_SU3W871v2lrteKkSGSOuCw_-Mw6os5S";
-const QUESTION_TIME = 40;
-const STORAGE_KEY = "upper_percentile_session";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const QUESTIONS = [
+const STORAGE_KEY = "upper_percentile_session";
+const QUESTION_TIME = 40;
+
+const MAIN_QUESTIONS = [
   { label: "שאלת ה-90%", prompt: "שאלה ראשונה", type: "multiple", options: ["א", "ב", "ג"], correctAnswers: ["א"] },
   { label: "שאלת ה-80%", prompt: "שאלה 2", type: "multiple", options: ["א", "ב", "ג"], correctAnswers: ["ב"] },
   { label: "שאלת ה-70%", prompt: "שאלה 3", type: "text", correctAnswers: ["אחד", "אחת", "1"] },
@@ -23,15 +25,29 @@ const QUESTIONS = [
   { label: "שאלת ה-1%", prompt: "שאלה 14", type: "text", correctAnswers: ["י"] },
 ];
 
-const hasBackend = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-const supabase = hasBackend ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const BONUS_QUESTIONS = [
+  { label: "בונוס 90%", prompt: "שאלת ה-90%", type: "multiple", options: ["א", "ב", "ג"], correctAnswers: ["ג"] },
+  { label: "בונוס 70%", prompt: "שאלת ה-70%", type: "text", correctAnswers: ["נאור", "נאור בן חיים"] },
+  { label: "בונוס 50%", prompt: "שאלת ה-50%", type: "text", correctAnswers: ["יזהר", "יזהר לוי"] },
+  { label: "בונוס 30%", prompt: "שאלת ה-30%", type: "text", correctAnswers: ["להחזיק את המורכבות"] },
+  { label: "בונוס 10%", prompt: "שאלת ה-10%", type: "text", correctAnswers: ["אדם", "אדם שגב", "שגב"] },
+  { label: "בונוס 1%", prompt: "שאלת ה-1%", type: "text", correctAnswers: ["ל"] },
+];
 
-const uid = () => Math.random().toString(36).slice(2, 10);
-const roomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
-const iso = () => new Date().toISOString();
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
 
-function normalizeAnswer(value) {
-  return String(value ?? "")
+function roomCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalize(v) {
+  return String(v ?? "")
     .trim()
     .replace(/\s+/g, " ")
     .replace(/״/g, '"')
@@ -39,80 +55,80 @@ function normalizeAnswer(value) {
     .toLowerCase();
 }
 
-function isCorrectAnswer(question, answer) {
-  return question.correctAnswers.some((a) => normalizeAnswer(a) === normalizeAnswer(answer));
+function isCorrect(question, answer) {
+  return question.correctAnswers.some((a) => normalize(a) === normalize(answer));
 }
 
 function getSession() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) return JSON.parse(raw);
-  const value = { sessionId: uid(), name: "" };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  return value;
+  const session = { sessionId: uid(), name: "" };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  return session;
 }
 
 function setSessionName(name) {
-  const session = getSession();
-  session.name = name;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  const s = getSession();
+  s.name = name;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
 
-function cardStyle() {
-  return {
-    background: "white",
-    borderRadius: 22,
-    padding: 20,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-  };
+function isBonusStatus(status) {
+  return String(status).startsWith("bonus_");
 }
 
-function buttonStyle(active = false) {
+function isLive(status) {
+  return status === "live" || status === "bonus_live";
+}
+
+function isResult(status) {
+  return status === "result" || status === "bonus_result";
+}
+
+function isIdle(status) {
+  return status === "idle" || status === "bonus_idle";
+}
+
+function isFinished(status) {
+  return status === "finished" || status === "bonus_finished";
+}
+
+function getQuestions(status) {
+  return isBonusStatus(status) ? BONUS_QUESTIONS : MAIN_QUESTIONS;
+}
+
+function getQuestionDbIndex(status, questionIndex) {
+  return isBonusStatus(status) ? 100 + questionIndex : questionIndex;
+}
+
+function card() {
+  return { background: "white", borderRadius: 22, padding: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.08)" };
+}
+
+function btn(primary = false) {
   return {
     padding: "12px 16px",
     borderRadius: 14,
-    border: active ? "2px solid #111827" : "1px solid #d1d5db",
-    background: active ? "#111827" : "#fff",
-    color: active ? "#fff" : "#111827",
+    border: primary ? "2px solid #111827" : "1px solid #d1d5db",
+    background: primary ? "#111827" : "#fff",
+    color: primary ? "#fff" : "#111827",
     cursor: "pointer",
     fontSize: 16,
-    fontWeight: 600,
+    fontWeight: 700,
   };
 }
 
-function answerButtonStyle(selected = false, correct = false) {
-  return {
-    padding: "14px 16px",
-    borderRadius: 14,
-    border: correct ? "2px solid #16a34a" : selected ? "2px solid #111827" : "1px solid #d1d5db",
-    background: correct ? "#f0fdf4" : selected ? "#111827" : "#fff",
-    color: correct ? "#14532d" : selected ? "#fff" : "#111827",
-    cursor: "pointer",
-    fontSize: 18,
-    width: "100%",
-  };
+function Page({ children }) {
+  return <div style={{ minHeight: "100vh", background: "#f3f4f6", padding: 24, direction: "rtl", fontFamily: "Arial, sans-serif" }}>{children}</div>;
 }
 
-async function createRoomOnline(title) {
-  const code = roomCode();
+async function createRoom(title) {
   const { data, error } = await supabase
     .from("upper_rooms")
-    .insert({ code, title, status: "idle", question_index: 0, time_left: QUESTION_TIME, alive_count: 40, skips_count: 0, wrong_count: 0 })
+    .insert({ code: roomCode(), title, status: "idle", question_index: 0, time_left: QUESTION_TIME, started_at: null, alive_count: 40, skips_count: 0, wrong_count: 0 })
     .select()
     .single();
   if (error) throw error;
-
-  const questionRows = QUESTIONS.map((q, idx) => ({
-    room_id: data.id,
-    idx,
-    label: q.label,
-    prompt: q.prompt,
-    type: q.type,
-    options: q.options || [],
-    correct_answers: q.correctAnswers,
-    input_mode: q.inputMode || null,
-  }));
-  const qInsert = await supabase.from("upper_questions").insert(questionRows);
-  if (qInsert.error) throw qInsert.error;
   return data;
 }
 
@@ -122,27 +138,19 @@ async function getRoomByCode(code) {
   return data;
 }
 
-async function getQuestions(roomId) {
-  const { data, error } = await supabase.from("upper_questions").select("*").eq("room_id", roomId).order("idx");
+async function getRoom(id) {
+  const { data, error } = await supabase.from("upper_rooms").select("*").eq("id", id).single();
   if (error) throw error;
-  return (data || []).map((q) => ({
-    id: q.id,
-    label: q.label,
-    prompt: q.prompt,
-    type: q.type,
-    options: q.options || [],
-    correctAnswers: q.correct_answers || [],
-    inputMode: q.input_mode || undefined,
-  }));
+  return data;
 }
 
-async function joinRoom(roomId, name, sessionId) {
+async function joinPlayer(roomId, sessionId, name) {
   const existing = await supabase.from("upper_players").select("*").eq("room_id", roomId).eq("session_id", sessionId).maybeSingle();
   if (existing.error) throw existing.error;
   if (existing.data) return existing.data;
   const { data, error } = await supabase
     .from("upper_players")
-    .insert({ room_id: roomId, name, session_id: sessionId, is_alive: true, skip_used: false })
+    .insert({ room_id: roomId, session_id: sessionId, name, is_alive: true, skip_used: false, last_correct: null })
     .select()
     .single();
   if (error) throw error;
@@ -155,51 +163,54 @@ async function getPlayers(roomId) {
   return data || [];
 }
 
-async function getRoomState(roomId) {
-  const room = await supabase.from("upper_rooms").select("*").eq("id", roomId).single();
-  if (room.error) throw room.error;
-  return room.data;
-}
-
-async function startQuestion(roomId) {
-  const { error } = await supabase
-    .from("upper_rooms")
-    .update({ status: "live", time_left: QUESTION_TIME, started_at: iso(), wrong_count: 0, skips_count: 0 })
-    .eq("id", roomId);
-  if (error) throw error;
-}
-
-async function goNext(room) {
-  const nextIndex = room.question_index + 1;
-  const status = nextIndex >= QUESTIONS.length ? "finished" : "idle";
-  const { error } = await supabase
-    .from("upper_rooms")
-    .update({ question_index: Math.min(nextIndex, QUESTIONS.length - 1), status, time_left: QUESTION_TIME, started_at: null, wrong_count: 0, skips_count: 0 })
-    .eq("id", room.id);
-  if (error) throw error;
-}
-
-async function submitPlayerAnswer(roomId, playerId, questionIndex, answer, usedSkip = false) {
-  const { error } = await supabase
-    .from("upper_answers")
-    .upsert({ room_id: roomId, player_id: playerId, question_index: questionIndex, answer, used_skip: usedSkip }, { onConflict: "room_id,player_id,question_index" });
-  if (error) throw error;
-}
-
-async function getAnswers(roomId, questionIndex) {
+async function getPlayerAnswer(roomId, playerId, status, questionIndex) {
+  const idx = getQuestionDbIndex(status, questionIndex);
   const { data, error } = await supabase
     .from("upper_answers")
     .select("*")
     .eq("room_id", roomId)
-    .eq("question_index", questionIndex);
+    .eq("player_id", playerId)
+    .eq("question_index", idx)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function submitAnswer(roomId, playerId, status, questionIndex, answer, usedSkip = false) {
+  const idx = getQuestionDbIndex(status, questionIndex);
+  const exists = await getPlayerAnswer(roomId, playerId, status, questionIndex);
+  if (exists) return exists;
+  const { data, error } = await supabase
+    .from("upper_answers")
+    .insert({ room_id: roomId, player_id: playerId, question_index: idx, answer, used_skip: usedSkip })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getAnswers(roomId, status, questionIndex) {
+  const idx = getQuestionDbIndex(status, questionIndex);
+  const { data, error } = await supabase.from("upper_answers").select("*").eq("room_id", roomId).eq("question_index", idx);
   if (error) throw error;
   return data || [];
 }
 
-async function revealRoom(room, questions) {
-  const players = await getPlayers(room.id);
-  const answers = await getAnswers(room.id, room.question_index);
+async function startQuestion(room) {
+  const nextStatus = isBonusStatus(room.status) ? "bonus_live" : "live";
+  const { error } = await supabase
+    .from("upper_rooms")
+    .update({ status: nextStatus, started_at: nowIso(), time_left: QUESTION_TIME, skips_count: 0, wrong_count: 0 })
+    .eq("id", room.id);
+  if (error) throw error;
+}
+
+async function revealQuestion(room) {
+  const questions = getQuestions(room.status);
   const question = questions[room.question_index];
+  const answers = await getAnswers(room.id, room.status, room.question_index);
+  const players = await getPlayers(room.id);
+
   let wrongCount = 0;
   let skipsCount = 0;
   let aliveCount = 0;
@@ -207,307 +218,309 @@ async function revealRoom(room, questions) {
   for (const player of players) {
     const ans = answers.find((a) => a.player_id === player.id);
     const usedSkip = Boolean(ans?.used_skip);
-    if (usedSkip) skipsCount += 1;
-
     let correct = false;
+
     if (usedSkip) {
       correct = true;
-    } else if (question.type === "multiple") {
-      correct = isCorrectAnswer(question, ans?.answer || "");
-    } else {
-      correct = isCorrectAnswer(question, ans?.answer || "");
+      skipsCount += 1;
+    } else if (ans) {
+      correct = isCorrect(question, ans.answer || "");
     }
 
     const patch = { last_correct: correct };
+
     if (player.is_alive) {
-      if (!correct) {
+      if (correct) {
+        aliveCount += 1;
+      } else {
         patch.is_alive = false;
         wrongCount += 1;
-      } else {
-        aliveCount += 1;
       }
     }
+
     if (usedSkip) patch.skip_used = true;
 
-    const upd = await supabase.from("upper_players").update(patch).eq("id", player.id);
-    if (upd.error) throw upd.error;
+    const { error } = await supabase.from("upper_players").update(patch).eq("id", player.id);
+    if (error) throw error;
   }
 
-  const roomUpd = await supabase
+  const nextStatus = isBonusStatus(room.status) ? "bonus_result" : "result";
+  const { error } = await supabase.from("upper_rooms").update({ status: nextStatus, wrong_count: wrongCount, skips_count: skipsCount, alive_count: aliveCount }).eq("id", room.id);
+  if (error) throw error;
+}
+
+async function nextQuestion(room) {
+  const questions = getQuestions(room.status);
+  const lastIndex = questions.length - 1;
+  const isBonus = isBonusStatus(room.status);
+
+  if (room.question_index >= lastIndex) {
+    const finalStatus = isBonus ? "bonus_finished" : "finished";
+    const { error } = await supabase.from("upper_rooms").update({ status: finalStatus }).eq("id", room.id);
+    if (error) throw error;
+    return;
+  }
+
+  const nextStatus = isBonus ? "bonus_idle" : "idle";
+  const { error } = await supabase
     .from("upper_rooms")
-    .update({ status: "result", wrong_count: wrongCount, skips_count: skipsCount, alive_count: aliveCount })
+    .update({ question_index: room.question_index + 1, status: nextStatus, started_at: null, wrong_count: 0, skips_count: 0 })
     .eq("id", room.id);
-  if (roomUpd.error) throw roomUpd.error;
+  if (error) throw error;
+}
+
+async function startBonusRound(room) {
+  const players = await getPlayers(room.id);
+  for (const player of players) {
+    const { error } = await supabase.from("upper_players").update({ is_alive: true, last_correct: null }).eq("id", player.id);
+    if (error) throw error;
+  }
+  const { error } = await supabase
+    .from("upper_rooms")
+    .update({ status: "bonus_idle", question_index: 0, started_at: null, wrong_count: 0, skips_count: 0, alive_count: players.length })
+    .eq("id", room.id);
+  if (error) throw error;
+}
+
+function Logo() {
+  return (
+    <div style={{ textAlign: "center", marginBottom: 20 }}>
+      <img src="/logo.webp" alt="האחוזון העליון" style={{ maxWidth: 220, width: "100%", height: "auto" }} onError={(e) => (e.currentTarget.style.display = "none")} />
+      <div style={{ fontSize: 30, fontWeight: 800, marginTop: 6 }}>האחוזון העליון</div>
+    </div>
+  );
 }
 
 function Home({ onCreate, onJoin }) {
   const [title, setTitle] = useState("האחוזון העליון");
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  const create = async () => {
-    try {
-      setBusy(true);
-      setError("");
-      const room = await createRoomOnline(title);
-      onCreate(room);
-    } catch (e) {
-      setError(e.message || "שגיאה ביצירת חדר");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const join = async () => {
-    try {
-      setBusy(true);
-      setError("");
-      const room = await getRoomByCode(code.toUpperCase());
-      if (!room) throw new Error("לא נמצא חדר כזה");
-      onJoin(room);
-    } catch (e) {
-      setError(e.message || "שגיאה בהצטרפות");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [err, setErr] = useState("");
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f4f6", padding: 24, direction: "rtl", fontFamily: "Arial, sans-serif" }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <img src="/logo.webp" alt="האחוזון העליון" style={{ maxWidth: 220, width: "100%", height: "auto" }} onError={(e) => (e.currentTarget.style.display = "none")} />
-          <div style={{ fontSize: 32, fontWeight: "bold", marginTop: 8 }}>האחוזון העליון</div>
-        </div>
-        <div style={{ ...cardStyle(), maxWidth: 700, margin: "0 auto", textAlign: "center" }}>
-          <h2>משחק אונליין</h2>
-          {!hasBackend && (
-            <div style={{ background: "#fff7ed", color: "#9a3412", padding: 12, borderRadius: 12, marginBottom: 16 }}>
-              כדי שזה יעבוד באמת אונליין צריך להכניס SUPABASE_URL ו־SUPABASE_ANON_KEY בקוד.
-            </div>
-          )}
-          <div style={{ display: "grid", gap: 12, marginBottom: 20 }}>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="שם המשחק" style={{ padding: 14, borderRadius: 12, border: "1px solid #d1d5db", fontSize: 18 }} />
-            <button onClick={create} disabled={!hasBackend || busy} style={buttonStyle(true)}>פתח חדר מנחה</button>
-          </div>
-          <div style={{ height: 1, background: "#e5e7eb", margin: "20px 0" }} />
-          <div style={{ display: "grid", gap: 12 }}>
-            <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="קוד חדר" style={{ padding: 14, borderRadius: 12, border: "1px solid #d1d5db", fontSize: 18 }} />
-            <button onClick={join} disabled={!hasBackend || busy} style={buttonStyle()}>הצטרפות כשחקן</button>
-          </div>
-          {error && <div style={{ color: "#b91c1c", marginTop: 16 }}>{error}</div>}
+    <Page>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <Logo />
+        <div style={{ ...card(), maxWidth: 700, margin: "0 auto" }}>
+          <h2 style={{ textAlign: "center", marginTop: 0 }}>משחק אונליין</h2>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d1d5db", marginBottom: 12, fontSize: 18 }} />
+          <button style={{ ...btn(true), width: "100%", marginBottom: 16 }} onClick={async () => { const room = await createRoom(title); onCreate(room); }}>פתח חדר מנחה</button>
+          <div style={{ height: 1, background: "#e5e7eb", margin: "16px 0" }} />
+          <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="קוד חדר" style={{ width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d1d5db", marginBottom: 12, fontSize: 18 }} />
+          <button style={{ ...btn(), width: "100%" }} onClick={async () => { const room = await getRoomByCode(code); if (!room) { setErr("קוד לא נמצא"); return; } onJoin(room); }}>הצטרפות כשחקן</button>
+          {err && <div style={{ color: "#b91c1c", marginTop: 12 }}>{err}</div>}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
-function HostView({ room, onExit }) {
-  const [roomState, setRoomState] = useState(room);
-  const [questions, setQuestions] = useState([]);
+function Host({ room, onExit }) {
+  const [state, setState] = useState(room);
   const [players, setPlayers] = useState([]);
 
-  const currentQuestion = questions[roomState.question_index] || QUESTIONS[0];
-  const timeLeft = roomState.status === "live" && roomState.started_at
-    ? Math.max(0, QUESTION_TIME - Math.floor((Date.now() - new Date(roomState.started_at).getTime()) / 1000))
-    : QUESTION_TIME;
+  const questions = useMemo(() => getQuestions(state.status), [state.status]);
+  const question = questions[state.question_index] || questions[0];
+  const isLastMainResult = state.status === "result" && !isBonusStatus(state.status) && state.question_index === MAIN_QUESTIONS.length - 1;
+  const liveSeconds = state.started_at ? Math.max(0, QUESTION_TIME - Math.floor((Date.now() - new Date(state.started_at).getTime()) / 1000)) : QUESTION_TIME;
 
-  const refresh = async () => {
-    const [r, q, p] = await Promise.all([getRoomState(room.id), getQuestions(room.id), getPlayers(room.id)]);
-    setRoomState(r); setQuestions(q); setPlayers(p);
-  };
+  async function refresh() {
+    const [r, p] = await Promise.all([getRoom(state.id), getPlayers(state.id)]);
+    setState(r);
+    setPlayers(p);
+  }
 
-  useEffect(() => { refresh(); const t = setInterval(refresh, 1000); return () => clearInterval(t); }, []);
   useEffect(() => {
-    if (roomState.status === "live" && timeLeft === 0 && questions.length) {
-      revealRoom(roomState, questions).then(refresh);
-    }
-  }, [timeLeft, roomState.status, questions.length]);
+    refresh();
+    const t = setInterval(refresh, 1000);
+    return () => clearInterval(t);
+  }, []);
 
-  const link = `${window.location.origin}${window.location.pathname}?code=${roomState.code}`;
+  useEffect(() => {
+    if (isLive(state.status) && liveSeconds === 0) revealQuestion(state).then(refresh);
+  }, [liveSeconds, state.status]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f4f6", padding: 24, direction: "rtl", fontFamily: "Arial, sans-serif" }}>
-      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 18 }}>
-          <img src="/logo.webp" alt="האחוזון העליון" style={{ maxWidth: 220, width: "100%", height: "auto" }} onError={(e) => (e.currentTarget.style.display = "none")} />
-          <div style={{ fontSize: 28, fontWeight: "bold" }}>האחוזון העליון</div>
-          <div style={{ marginTop: 8 }}>קוד חדר: <b>{roomState.code}</b></div>
-        </div>
-
-        <div style={{ ...cardStyle(), marginBottom: 16 }}>
-          <div style={{ marginBottom: 10 }}><b>קישור לשחקנים:</b></div>
-          <div style={{ wordBreak: "break-all", marginBottom: 12 }}>{link}</div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button style={buttonStyle()} onClick={() => navigator.clipboard.writeText(link)}>העתק קישור</button>
-            <button style={buttonStyle()} onClick={onExit}>יציאה</button>
+    <Page>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <Logo />
+        <div style={{ ...card(), marginBottom: 16 }}>
+          <div><b>קוד חדר:</b> {state.code}</div>
+          <div style={{ marginTop: 8, wordBreak: "break-all" }}><b>קישור לשחקנים:</b> {`${window.location.origin}?code=${state.code}`}</div>
+          <div style={{ display: "flex", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
+            <button style={btn()} onClick={() => navigator.clipboard.writeText(`${window.location.origin}?code=${state.code}`)}>העתק קישור</button>
+            <button style={btn()} onClick={onExit}>יציאה</button>
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 20 }}>
-          <div style={cardStyle()}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
-              <div style={cardStyle()}><div style={{ color: "#6b7280", fontSize: 14 }}>מחוברים</div><div style={{ fontSize: 30, fontWeight: "bold" }}>{players.length}</div></div>
-              <div style={cardStyle()}><div style={{ color: "#6b7280", fontSize: 14 }}>עדיין במשחק</div><div style={{ fontSize: 30, fontWeight: "bold" }}>{roomState.alive_count}</div></div>
-              <div style={cardStyle()}><div style={{ color: "#6b7280", fontSize: 14 }}>נפלו בשאלה</div><div style={{ fontSize: 30, fontWeight: "bold" }}>{roomState.wrong_count}</div></div>
-              <div style={cardStyle()}><div style={{ color: "#6b7280", fontSize: 14 }}>דילגו</div><div style={{ fontSize: 30, fontWeight: "bold" }}>{roomState.question_index >= 4 ? roomState.skips_count : 0}</div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 20 }}>
+          <div style={card()}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+              <div style={card()}><div style={{ color: "#6b7280", fontSize: 14 }}>מחוברים</div><div style={{ fontSize: 30, fontWeight: 800 }}>{players.length}</div></div>
+              <div style={card()}><div style={{ color: "#6b7280", fontSize: 14 }}>עדיין במשחק</div><div style={{ fontSize: 30, fontWeight: 800 }}>{state.alive_count}</div></div>
+              <div style={card()}><div style={{ color: "#6b7280", fontSize: 14 }}>נפלו בשאלה</div><div style={{ fontSize: 30, fontWeight: 800 }}>{state.wrong_count}</div></div>
+              <div style={card()}><div style={{ color: "#6b7280", fontSize: 14 }}>דילגו</div><div style={{ fontSize: 30, fontWeight: 800 }}>{isBonusStatus(state.status) ? 0 : state.skips_count}</div></div>
             </div>
 
-            <div style={{ color: "#6b7280", marginBottom: 6 }}>{currentQuestion.label}</div>
-            <div style={{ fontSize: 34, fontWeight: "bold", marginBottom: 14 }}>{currentQuestion.prompt}</div>
+            <div style={{ color: "#6b7280", marginBottom: 8 }}>{isBonusStatus(state.status) ? "סבב בונוס" : "משחק ראשי"} · {question.label}</div>
+            <div style={{ fontSize: 34, fontWeight: 800, marginBottom: 12 }}>{question.prompt}</div>
 
-            {roomState.status === "live" && <div style={{ marginBottom: 14, padding: 12, borderRadius: 14, background: "#eff6ff", color: "#1d4ed8", fontWeight: "bold", fontSize: 22, textAlign: "center" }}>נותרו {timeLeft} שניות</div>}
-            {roomState.status === "result" && <div style={{ marginBottom: 14, padding: 12, borderRadius: 14, background: "#f3f4f6", fontWeight: "bold", fontSize: 20, textAlign: "center" }}>השאלה הסתיימה. אפשר לעבור לשאלה הבאה</div>}
+            {isLive(state.status) && <div style={{ background: "#eff6ff", color: "#1d4ed8", padding: 14, borderRadius: 14, textAlign: "center", fontWeight: 800, marginBottom: 14 }}>נותרו {liveSeconds} שניות</div>}
+            {isResult(state.status) && <div style={{ background: "#f3f4f6", padding: 14, borderRadius: 14, textAlign: "center", fontWeight: 800, marginBottom: 14 }}>השאלה הסתיימה</div>}
+            {isFinished(state.status) && <div style={{ background: "#fef3c7", padding: 14, borderRadius: 14, textAlign: "center", fontWeight: 800, marginBottom: 14 }}>הסבב הסתיים</div>}
 
-            {currentQuestion.type === "multiple" ? (
+            {question.type === "multiple" ? (
               <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
-                {currentQuestion.options.map((opt, i) => (
-                  <div key={i} style={{ padding: 14, border: currentQuestion.correctAnswers.includes(opt) && roomState.status === "result" ? "2px solid #16a34a" : "1px solid #d1d5db", borderRadius: 12, background: currentQuestion.correctAnswers.includes(opt) && roomState.status === "result" ? "#f0fdf4" : "#fff", fontSize: 18 }}>{opt}</div>
-                ))}
+                {question.options.map((opt, i) => <div key={i} style={{ padding: 14, borderRadius: 12, border: "1px solid #d1d5db", background: isResult(state.status) && question.correctAnswers.includes(opt) ? "#dcfce7" : "#fff" }}>{opt}</div>)}
               </div>
             ) : (
-              <div style={{ padding: 16, borderRadius: 14, border: "1px solid #d1d5db", background: "#fafafa", fontSize: 18, marginBottom: 16 }}>
-                תשובה בתיבת טקסט{currentQuestion.inputMode === "numeric" ? " (מספר)" : ""}
-                {roomState.status === "result" && <div style={{ marginTop: 8, color: "#166534", fontWeight: "bold" }}>תשובה נכונה: {currentQuestion.correctAnswers.join(" / ")}</div>}
+              <div style={{ padding: 14, borderRadius: 12, border: "1px solid #d1d5db", background: "#fafafa", marginBottom: 16 }}>
+                תשובה בתיבת טקסט
+                {isResult(state.status) && <div style={{ marginTop: 8, color: "#166534", fontWeight: 700 }}>תשובה נכונה: {question.correctAnswers.join(" / ")}</div>}
               </div>
             )}
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {roomState.status !== "live" && roomState.status !== "finished" && <button style={buttonStyle(true)} onClick={async () => { await startQuestion(room.id); refresh(); }}>{roomState.status === "idle" ? "התחל שאלה" : "התחל שוב"}</button>}
-              {roomState.status === "result" && <button style={buttonStyle()} onClick={async () => { await goNext(roomState); refresh(); }}>שאלה הבאה</button>}
+              {isIdle(state.status) && <button style={btn(true)} onClick={async () => { await startQuestion(state); refresh(); }}>התחל שאלה</button>}
+              {isResult(state.status) && !isLastMainResult && <button style={btn()} onClick={async () => { await nextQuestion(state); refresh(); }}>שאלה הבאה</button>}
+              {isLastMainResult && <button style={btn(true)} onClick={async () => { await startBonusRound(state); refresh(); }}>התחל סבב בונוס</button>}
             </div>
           </div>
 
-          <div style={cardStyle()}>
-            <h2 style={{ marginTop: 0 }}>שחקנים</h2>
-            <div style={{ display: "grid", gap: 12 }}>
+          <div style={card()}>
+            <h3 style={{ marginTop: 0 }}>שחקנים</h3>
+            <div style={{ display: "grid", gap: 10 }}>
               {players.map((p) => (
-                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #e5e7eb", borderRadius: 14, padding: 12 }}>
+                <div key={p.id} style={{ padding: 12, borderRadius: 12, border: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontWeight: "bold" }}>{p.name}</div>
-                    <div style={{ color: "#6b7280", fontSize: 14 }}>{p.is_alive ? "עדיין במשחק" : "יצא מהמשחק"}</div>
+                    <div style={{ fontWeight: 700 }}>{p.name}</div>
+                    <div style={{ color: "#6b7280", fontSize: 14 }}>{p.is_alive ? "פעיל" : "לא נספר פעיל"}</div>
                   </div>
-                  <div style={{ color: p.is_alive ? "#15803d" : "#b91c1c", fontWeight: "bold" }}>{p.is_alive ? "פעיל" : "נפל"}</div>
+                  <div style={{ fontWeight: 700, color: p.is_alive ? "#15803d" : "#9ca3af" }}>{p.is_alive ? "במשחק" : "ממשיך מהצד"}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
-function PlayerView({ room, onExit }) {
+function Player({ room, onExit }) {
   const session = getSession();
-  const [roomState, setRoomState] = useState(room);
-  const [questions, setQuestions] = useState([]);
+  const [state, setState] = useState(room);
   const [player, setPlayer] = useState(null);
   const [name, setName] = useState(session.name || "");
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [textAnswer, setTextAnswer] = useState("");
-  const [usedSkipThisQuestion, setUsedSkipThisQuestion] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [draftChoice, setDraftChoice] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
 
-  const currentQuestion = questions[roomState.question_index] || QUESTIONS[0];
-  const canSkip = roomState.question_index >= 4 && player && !player.skip_used && player.is_alive && roomState.status === "live";
-  const timeLeft = roomState.status === "live" && roomState.started_at
-    ? Math.max(0, QUESTION_TIME - Math.floor((Date.now() - new Date(roomState.started_at).getTime()) / 1000))
-    : QUESTION_TIME;
+  const questions = useMemo(() => getQuestions(state.status), [state.status]);
+  const question = questions[state.question_index] || questions[0];
+  const showSkip = !isBonusStatus(state.status) && state.question_index >= 4 && isLive(state.status) && player?.is_alive && !player?.skip_used;
+  const liveSeconds = state.started_at ? Math.max(0, QUESTION_TIME - Math.floor((Date.now() - new Date(state.started_at).getTime()) / 1000)) : QUESTION_TIME;
 
-  const refresh = async () => {
-    const [r, q, players] = await Promise.all([getRoomState(room.id), getQuestions(room.id), getPlayers(room.id)]);
-    setRoomState(r); setQuestions(q);
+  async function refresh() {
+    const [r, players] = await Promise.all([getRoom(state.id), getPlayers(state.id)]);
+    setState(r);
     const me = players.find((p) => p.session_id === session.sessionId) || null;
     setPlayer(me);
-  };
+    if (me) {
+      const ans = await getPlayerAnswer(r.id, me.id, r.status, r.question_index);
+      setSubmitted(Boolean(ans));
+      if (ans) {
+        setDraftText(ans.answer || "");
+        setDraftChoice(ans.answer || null);
+      }
+    }
+  }
 
-  useEffect(() => { refresh(); const t = setInterval(refresh, 1000); return () => clearInterval(t); }, []);
-  useEffect(() => { setSelectedAnswer(null); setTextAnswer(""); setUsedSkipThisQuestion(false); }, [roomState.question_index, roomState.status]);
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, 1000);
+    return () => clearInterval(t);
+  }, []);
 
-  const join = async () => {
+  useEffect(() => {
+    setDraftText("");
+    setDraftChoice(null);
+    setSubmitted(false);
+    if (player) getPlayerAnswer(state.id, player.id, state.status, state.question_index).then((ans) => {
+      if (ans) {
+        setSubmitted(true);
+        setDraftText(ans.answer || "");
+        setDraftChoice(ans.answer || null);
+      }
+    });
+  }, [state.question_index, state.status]);
+
+  async function join() {
     setSessionName(name);
-    await joinRoom(room.id, name, session.sessionId);
+    await joinPlayer(state.id, session.sessionId, name);
     refresh();
-  };
+  }
 
-  const saveAnswer = async (answerValue, skip = false) => {
-    if (!player || roomState.status !== "live") return;
-    await submitPlayerAnswer(room.id, player.id, roomState.question_index, answerValue, skip);
+  async function submitCurrent() {
+    if (!player || submitted || !isLive(state.status)) return;
+    const value = question.type === "multiple" ? draftChoice : draftText;
+    if (!String(value || "").trim()) return;
+    await submitAnswer(state.id, player.id, state.status, state.question_index, value, false);
+    setSubmitted(true);
     refresh();
-  };
+  }
+
+  async function doSkip() {
+    if (!player || submitted || !showSkip) return;
+    await submitAnswer(state.id, player.id, state.status, state.question_index, "SKIP", true);
+    setSubmitted(true);
+    refresh();
+  }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f4f6", padding: 24, direction: "rtl", fontFamily: "Arial, sans-serif" }}>
+    <Page>
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 18 }}>
-          <img src="/logo.webp" alt="האחוזון העליון" style={{ maxWidth: 220, width: "100%", height: "auto" }} onError={(e) => (e.currentTarget.style.display = "none")} />
-          <div style={{ fontSize: 28, fontWeight: "bold" }}>האחוזון העליון</div>
-        </div>
-
+        <Logo />
         {!player ? (
-          <div style={{ ...cardStyle(), maxWidth: 600, margin: "0 auto" }}>
-            <h2>כניסה למשחק</h2>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלך" style={{ width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d1d5db", fontSize: 18, marginBottom: 12 }} />
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button style={buttonStyle(true)} onClick={join} disabled={!name.trim()}>היכנסי למשחק</button>
-              <button style={buttonStyle()} onClick={onExit}>חזרה</button>
-            </div>
+          <div style={{ ...card(), maxWidth: 650, margin: "0 auto" }}>
+            <h2 style={{ marginTop: 0 }}>כניסה למשחק</h2>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="השם שלך" style={{ width: "100%", padding: 14, borderRadius: 12, border: "1px solid #d1d5db", marginBottom: 12, fontSize: 18 }} />
+            <button style={{ ...btn(true), marginLeft: 12 }} onClick={join}>הצטרפי למשחק</button>
+            <button style={btn()} onClick={onExit}>חזרה</button>
           </div>
         ) : (
-          <div style={{ ...cardStyle(), maxWidth: 820, margin: "0 auto" }}>
-            <h2 style={{ marginTop: 0 }}>מסך שחקן</h2>
-            <div style={{ marginBottom: 16, color: "#6b7280" }}>{player.name}</div>
-            <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-              <div style={{ padding: "10px 14px", borderRadius: 999, background: player.is_alive ? "#dcfce7" : "#fee2e2" }}>{player.is_alive ? "עדיין במשחק" : "יצאת מהמשחק"}</div>
-              <div style={{ padding: "10px 14px", borderRadius: 999, background: "#ede9fe" }}>{roomState.question_index >= 4 ? player.skip_used ? "דלג נוצל" : "דלג זמין" : "דלג ייפתח אחרי שאלה 5"}</div>
+          <div style={{ ...card(), maxWidth: 850, margin: "0 auto" }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ padding: "10px 14px", borderRadius: 999, background: player.is_alive ? "#dcfce7" : "#e5e7eb" }}>{player.is_alive ? "פעיל במשחק" : "לא נספר פעיל, אבל ממשיך לענות"}</div>
+              {showSkip && <div style={{ padding: "10px 14px", borderRadius: 999, background: "#ede9fe" }}>אפשר לדלג בשאלה הזאת</div>}
+              {isBonusStatus(state.status) && <div style={{ padding: "10px 14px", borderRadius: 999, background: "#fef3c7" }}>סבב בונוס · בלי דלג</div>}
             </div>
 
-            <div style={{ color: "#6b7280", marginBottom: 8 }}>{currentQuestion.label}</div>
-            <div style={{ fontSize: 36, fontWeight: "bold", marginBottom: 16 }}>{currentQuestion.prompt}</div>
+            <div style={{ color: "#6b7280", marginBottom: 8 }}>{question.label}</div>
+            <div style={{ fontSize: 34, fontWeight: 800, marginBottom: 16 }}>{question.prompt}</div>
 
-            {roomState.status === "live" && <div style={{ marginBottom: 16, padding: 14, borderRadius: 14, background: "#eff6ff", color: "#1d4ed8", fontWeight: "bold", fontSize: 24, textAlign: "center" }}>נותרו {timeLeft} שניות</div>}
-            {roomState.status === "idle" && <div style={{ marginBottom: 16, padding: 14, borderRadius: 14, background: "#f3f4f6", textAlign: "center", fontSize: 18 }}>ממתינים שהמנחה יתחיל את השאלה</div>}
-            {roomState.status === "result" && <div style={{ marginBottom: 16, padding: 14, borderRadius: 14, background: player.last_correct ? "#dcfce7" : "#fee2e2", textAlign: "center", fontSize: 22, fontWeight: "bold" }}>{player.last_correct ? "צדקת ונשארת במשחק" : "טעית ויצאת מהמשחק"}</div>}
+            {isLive(state.status) && <div style={{ background: "#eff6ff", color: "#1d4ed8", padding: 14, borderRadius: 14, textAlign: "center", fontWeight: 800, marginBottom: 16 }}>נותרו {liveSeconds} שניות</div>}
+            {isIdle(state.status) && <div style={{ background: "#f3f4f6", padding: 14, borderRadius: 14, textAlign: "center", fontWeight: 800, marginBottom: 16 }}>ממתינים למנחה</div>}
+            {isResult(state.status) && <div style={{ background: player.last_correct ? "#dcfce7" : "#fee2e2", padding: 14, borderRadius: 14, textAlign: "center", fontWeight: 800, marginBottom: 16 }}>{player.last_correct ? "צדקת" : "טעית"}</div>}
 
-            {currentQuestion.type === "multiple" ? (
-              <div style={{ display: "grid", gap: 12 }}>
-                {currentQuestion.options.map((opt, i) => (
-                  <button
-                    key={i}
-                    style={answerButtonStyle(selectedAnswer === i, roomState.status === "result" && currentQuestion.correctAnswers.includes(opt))}
-                    onClick={async () => { setSelectedAnswer(i); await saveAnswer(opt, false); }}
-                    disabled={roomState.status !== "live" || !player.is_alive || usedSkipThisQuestion}
-                  >
-                    {opt}
-                  </button>
+            {question.type === "multiple" ? (
+              <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+                {question.options.map((opt, i) => (
+                  <button key={i} disabled={!isLive(state.status) || submitted} onClick={() => setDraftChoice(opt)} style={{ padding: 14, borderRadius: 12, border: draftChoice === opt ? "2px solid #111827" : "1px solid #d1d5db", background: draftChoice === opt ? "#111827" : "#fff", color: draftChoice === opt ? "#fff" : "#111827", fontSize: 18, cursor: "pointer" }}>{opt}</button>
                 ))}
               </div>
             ) : (
-              <div style={{ display: "grid", gap: 12 }}>
-                <input
-                  value={textAnswer}
-                  onChange={(e) => { setTextAnswer(e.target.value); saveAnswer(e.target.value, false); }}
-                  placeholder={currentQuestion.inputMode === "numeric" ? "כתבי מספר" : "כתבי תשובה"}
-                  inputMode={currentQuestion.inputMode === "numeric" ? "numeric" : "text"}
-                  disabled={roomState.status !== "live" || !player.is_alive || usedSkipThisQuestion}
-                  style={{ width: "100%", padding: 16, borderRadius: 14, border: "1px solid #d1d5db", fontSize: 20 }}
-                />
-              </div>
+              <input value={draftText} onChange={(e) => setDraftText(e.target.value)} disabled={!isLive(state.status) || submitted} inputMode={question.inputMode || "text"} placeholder={question.inputMode === "numeric" ? "כתבי מספר" : "כתבי תשובה"} style={{ width: "100%", padding: 16, borderRadius: 12, border: "1px solid #d1d5db", marginBottom: 16, fontSize: 20 }} />
             )}
 
-            {canSkip && (
-              <button
-                onClick={async () => { setUsedSkipThisQuestion(true); await saveAnswer("SKIP", true); }}
-                style={{ marginTop: 16, ...buttonStyle(), background: "#ede9fe", border: "1px solid #c4b5fd" }}
-              >
-                דלג
-              </button>
-            )}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {isLive(state.status) && !submitted && <button style={btn(true)} onClick={submitCurrent}>הגש תשובה</button>}
+              {submitted && <div style={{ padding: "12px 16px", borderRadius: 12, background: "#e5e7eb", fontWeight: 700 }}>התשובה ננעלה</div>}
+              {showSkip && !submitted && <button style={btn()} onClick={doSkip}>דלג</button>}
+            </div>
           </div>
         )}
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -518,75 +531,16 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
-    if (!code || !hasBackend) return;
-    getRoomByCode(code.toUpperCase()).then((found) => {
-      if (found) {
-        setRoom(found);
+    if (!code) return;
+    getRoomByCode(code.toUpperCase()).then((r) => {
+      if (r) {
+        setRoom(r);
         setMode("player");
       }
     });
   }, []);
 
-  if (!room) {
-    return <Home onCreate={(r) => { setRoom(r); setMode("host"); }} onJoin={(r) => { setRoom(r); setMode("player"); }} />;
-  }
-
-  if (mode === "host") return <HostView room={room} onExit={() => { setRoom(null); setMode(null); }} />;
-  return <PlayerView room={room} onExit={() => { setRoom(null); setMode(null); }} />;
+  if (!room) return <Home onCreate={(r) => { setRoom(r); setMode("host"); }} onJoin={(r) => { setRoom(r); setMode("player"); }} />;
+  if (mode === "host") return <Host room={room} onExit={() => { setRoom(null); setMode(null); }} />;
+  return <Player room={room} onExit={() => { setRoom(null); setMode(null); }} />;
 }
-
-/*
-Supabase tables needed:
-
-create table upper_rooms (
-  id uuid primary key default gen_random_uuid(),
-  code text unique not null,
-  title text not null,
-  status text not null default 'idle',
-  question_index int not null default 0,
-  time_left int not null default 40,
-  started_at timestamptz null,
-  alive_count int not null default 40,
-  skips_count int not null default 0,
-  wrong_count int not null default 0,
-  created_at timestamptz not null default now()
-);
-
-create table upper_questions (
-  id uuid primary key default gen_random_uuid(),
-  room_id uuid not null references upper_rooms(id) on delete cascade,
-  idx int not null,
-  label text not null,
-  prompt text not null,
-  type text not null,
-  options jsonb,
-  correct_answers jsonb not null,
-  input_mode text null
-);
-
-create table upper_players (
-  id uuid primary key default gen_random_uuid(),
-  room_id uuid not null references upper_rooms(id) on delete cascade,
-  session_id text not null,
-  name text not null,
-  is_alive boolean not null default true,
-  skip_used boolean not null default false,
-  last_correct boolean null,
-  created_at timestamptz not null default now()
-);
-
-create unique index upper_players_room_session_idx on upper_players(room_id, session_id);
-
-create table upper_answers (
-  id uuid primary key default gen_random_uuid(),
-  room_id uuid not null references upper_rooms(id) on delete cascade,
-  player_id uuid not null references upper_players(id) on delete cascade,
-  question_index int not null,
-  answer text,
-  used_skip boolean not null default false,
-  created_at timestamptz not null default now(),
-  unique(room_id, player_id, question_index)
-);
-
-Enable RLS and add open policies for MVP.
-*/
